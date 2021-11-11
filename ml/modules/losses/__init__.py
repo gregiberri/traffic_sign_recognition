@@ -4,7 +4,6 @@
 # @Email   : g.albert95@gmail.com
 
 import torch.nn as torch_losses
-import torchgeometry.losses as torchgeomerty_losses
 from ml.modules.losses.focal_loss import FocalLoss
 
 
@@ -18,9 +17,6 @@ def get_loss(loss_config):
 
     if hasattr(torch_losses, loss_config.name):
         function = getattr(torch_losses, loss_config.name)
-        return function(**loss_config.params.dict())
-    if hasattr(torchgeomerty_losses, loss_config.name):
-        function = getattr(torchgeomerty_losses, loss_config.name)
         return function(**loss_config.params.dict())
     if loss_config.name == 'FocalLoss':
         return FocalLoss(**loss_config.params.dict())

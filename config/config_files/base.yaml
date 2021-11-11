@@ -5,7 +5,11 @@ env:
   epochs: 30
 metrics:
   goal_metric: 'f1'
-  save_metrics: ['loss', 'Accuracy', 'Precision', 'Recall', 'PrecisionRecallCurve', 'ROC']
+  save_metrics:
+    Accuracy: {num_classes: 37, average: 'macro'}
+    Precision: {num_classes: 37, average: 'macro'}
+    Recall: {num_classes: 37, average: 'macro'}
+    F1: {num_classes: 37, average: 'macro'}
 data:
   name: "traffic_signs"
   params:
@@ -16,8 +20,9 @@ data:
     input_channels: 3
     num_classes: 37
 
-    transforms: [['Resize', [[32, 32]]],
+    transforms: [['ColorJitter', [.1, .1, .1, .1]],  # it must be a list to make sure to preserve the order
                  ['RandomResizedCrop', [[32, 32]]],
+                 ['Resize', [[32, 32]]],
                  ['Normalize', [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]]]
 
     gpu_to_use: 0
@@ -28,16 +33,16 @@ model:
   name: "resnet18"
   params:
     num_classes: 37
-    pretrained: False
+    pretrained: true
 loss:
-  name: 'CrossEntropyLoss'
+  name: 'FocalLoss'
   params:
-    weight: null
+    alpha: null
 optimizer:
-  name: 'Adam'
+  name: 'Ranger'
   params:
     lr: 0.001
-    weight_decay: 0.000001
+    weight_decay: 0.00001
 lr_policy:
   name: 'ExponentialLR'
   params:

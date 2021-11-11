@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 @Author  : Albert Gregus
-@Email   : albert.gregus@continental-corporation.com
+@Email   : g.albert95@gmail.com
 """
 
 import argparse
 import logging
 import warnings
 
-import torch
 
 from config import ConfigNamespace
 # from ml.solvers.hpo_solver import HPOSolver
@@ -18,7 +17,7 @@ from utils.init_random_seeds import set_random_seed
 
 warnings.filterwarnings("ignore")
 logging.basicConfig(format='[%(asctime)s %(levelname)s] %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
+                    datefmt='%Y/%m/%d %H:%M:%S',
                     level=logging.INFO)
 
 parser = argparse.ArgumentParser(description='Training script')
@@ -33,10 +32,13 @@ args = parser.parse_args()
 if __name__ == '__main__':
     config = ConfigNamespace(args.config)
     set_random_seed(config.env.random_seed)
+
+    # run a simple training/val or an HPO
     if args.mode == 'hpo':
         # solver = HPOSolver(config, args)
         pass
     else:
         solver = Solver(config, args)
 
-    solver.run()
+    max_metric = solver.run()
+    print(f'Max metric: {max_metric}')

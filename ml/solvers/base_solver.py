@@ -34,7 +34,7 @@ class Solver(object):
         self.init_loss()
         self.init_optimizer()
         self.init_lr_policy()
-        # self.init_metrics()
+        self.init_metrics()
 
         self.load_checkpoint()
 
@@ -109,6 +109,8 @@ class Solver(object):
         logging.info("Initializing metrics.")
         if self.phase == 'train' or self.phase == 'resume':
             self.train_metric = Metrics(self.result_dir, 'train', self.config.metrics)
+        elif self.phase == 'test':
+            return
         else:
             raise ValueError(f'Wrong args mode: {self.args.mode}')
         self.val_metric = Metrics(self.result_dir, 'val', self.config.metrics)
@@ -147,14 +149,15 @@ class Solver(object):
         Before every epoch set the model to the right mode (train or eval)
         and select the corresponding loader and metric.
         """
+        self.results = {'paths': [], 'preds': [], 'labels': []}
         if self.current_mode == 'train':
             self.model.train()
             self.loader = self.train_loader
-            # self.metric = self.train_metric
+            self.metric = self.train_metric
         elif self.current_mode == 'val':
             self.model.eval()
             self.loader = self.val_loader
-            # self.metric = self.val_metric
+            self.metric = self.val_metric
         else:
             raise ValueError(f'Wrong solver mode: {self.current_mode}')
         torch.cuda.empty_cache()
@@ -163,8 +166,11 @@ class Solver(object):
         """
         After every epoch collect some garbage, evaluate and reset the current metric.
         """
+        if self.phase != 'test':
+            self.metric.compute_epoch_end_metric(torch.cat(self.results['preds'], 0),
+                                                 torch.cat(self.results['labels'], 0),
+                                                 self.epoch)
         gc.collect()
-        # self.metric.on_epoch_end(self.epoch) todo
         torch.cuda.empty_cache()
 
     def run(self):
@@ -177,7 +183,7 @@ class Solver(object):
         else:
             raise ValueError(f'Wrong phase: {self.phase}')
 
-        return self.val_metric
+        return  # self.val_metric
 
     def train(self):
         """
@@ -187,17 +193,19 @@ class Solver(object):
 
         for self.epoch in range(self.epoch, self.epochs):
             logging.info(f"Start training epoch: {self.epoch}/{self.epochs}")
+            self.current_mode = 'train'
             self.run_epoch()
             logging.info(f"Start evaluating epoch: {self.epoch}/{self.epochs}")
             self.eval()
-            self.current_mode = 'train'
+        return max(self.val_metric.epoch_results[self.config.metrics.goal_metric])
         # self.writer.close()
 
     def eval(self):
         self.current_mode = 'val'
         with torch.no_grad():
             self.run_epoch()
-            # self.save_best_checkpoint()  # todo
+            if self.phase != 'test': ...  # save results to csv
+            if self.phase in ['train', 'resume']: ...# self.save_best_checkpoint()
 
     def run_epoch(self):
         """
@@ -218,25 +226,45 @@ class Solver(object):
                 output, loss = self.step(minibatch)
                 train_time = time.time() - train_t_start
 
-                self.update_bar(pbar, idx, preproc_time, train_time, loss)
+                if self.phase != 'test':
+                    self.metric.compute_metric(output, minibatch['labels'])
 
-                # self.metric.compute_metric(output, minibatch, loss)
-                # self.write_to_tensorboard()
+                    # save for calculating the full epoch metrics (the dataset is small so it can fit into the memory)
+                    # the calculated metrics are `macro` average to be less sensitive to the class imbalance
+                    # with larger datasets running metrics are suggested
+                    # large datasets usually less affected by class imbalance too
+                    self.results['paths'].append(minibatch['paths'])
+                    self.results['preds'].append(output)
+                    self.results['labels'].append(minibatch['labels'])
 
+                    self.update_bar_description(pbar, idx, preproc_time, train_time, loss)
+                    # self.write_to_tensorboard()
+
+                pbar.update(1)
                 preproc_t_start = time.time()
 
         self.after_epoch()
 
-    def update_bar(self, pbar, idx, preproc_time, train_time, loss):
-        print_str = f'[{self.current_mode}] Epoch {self.epoch}/{self.epochs} ' \
-                    + f'Iter{idx + 1}/{len(self.loader)}: ' \
-                    + f'lr={self.optimizer.param_groups[0]["lr"]:.5f} ' \
-                    + f'loss: {loss:.3f} ' \
-                    + f'prepr: {preproc_time:.3f}s ' \
-                    + f'train: {train_time:.3f}s'
+    def update_bar_description(self, pbar, idx, preproc_time, train_time, loss):
+        """
+        Update the current log bar with the latest result.
+
+        :param pbar: pbar object
+        :param idx: iteration number in the epoch
+        :param preproc_time: time spent with preprocessing
+        :param train_time: time spent with training
+        :param loss: loss value
+        """
+        print_str = f'[{self.current_mode}] epoch {self.epoch}/{self.epochs} ' \
+                    + f'iter {idx + 1}/{len(self.loader)}:' \
+                    + f'lr:{self.optimizer.param_groups[0]["lr"]:.5f}|' \
+                    + f'loss: {loss:.3f}|' \
+                    + self.metric.get_snapshot_info() \
+                    + f'|t_prep: {preproc_time:.3f}s|' \
+                    + f't_train: {train_time:.3f}s'
         # + self.metric.get_snapshot_info() \
         pbar.set_description(print_str, refresh=False)
-        pbar.update(1)
+
 
     def write_to_tensorboard(self):
         ...
@@ -259,7 +287,7 @@ class Solver(object):
         if self.current_mode == 'train':
             # backward
             self.optimizer.zero_grad()
-            loss = self.loss(output, minibatch['label_numbers'])
+            loss = self.loss(output, minibatch['labels'])
             loss.backward()
             self.optimizer.step()
             self.lr_policy.step(self.epoch)

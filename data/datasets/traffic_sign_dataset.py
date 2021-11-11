@@ -10,13 +10,17 @@ from data.utils.split_train_val_test import split_train_val
 from utils.device import DEVICE
 
 
-def make_transform_composition(transformation_list):
+def make_transform_composition(transformation_list, split):
     """
     Just casually iterating through the transformations from the transform list, load them and make the composition.
     :param transformation_list: list containing lists of the function names and parameters: [['function1', [function1_params], ['function2', [function2_params]. ...]
+    :param split:
     :return: transform
     """
     compose_list = []
+    if split == 'val':
+        transformation_list = transformation_list[-2:]
+
     for item in transformation_list:
         if hasattr(transforms, item[0]):
             function = getattr(transforms, item[0])
@@ -36,7 +40,7 @@ class TrafficSignDataloader(data.Dataset):
         self.split = split
 
         self.paths, self.labels = self.load_labels_and_paths()
-        self.transforms = make_transform_composition(self.config.transforms)
+        self.transforms = make_transform_composition(self.config.transforms, self.split)
 
     def __getitem__(self, item):
         path, label = self.paths[item], self.labels[item]
@@ -52,7 +56,7 @@ class TrafficSignDataloader(data.Dataset):
         # run the transform on the image
         torch_input_image = self.transforms(torch_input_image)
 
-        return {'paths': path, 'input_images': torch_input_image, 'label_numbers': torch_label}
+        return {'paths': path, 'input_images': torch_input_image, 'labels': torch_label}
 
     def __len__(self):
         return len(self.labels)

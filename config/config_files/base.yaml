@@ -1,0 +1,44 @@
+id: "base"
+env:
+  result_dir: 'results'
+  random_seed: 0
+  epochs: 30
+metrics:
+  goal_metric: 'f1'
+  save_metrics: ['loss', 'Accuracy', 'Precision', 'Recall', 'PrecisionRecallCurve', 'ROC']
+data:
+  name: "traffic_signs"
+  params:
+    dataset_path: '/home/albert/data/R-jpg'
+
+    batch_size: 512
+    input_size: [32, 32]
+    input_channels: 3
+    num_classes: 37
+
+    transforms: [['Resize', [[32, 32]]],
+                 ['RandomResizedCrop', [[32, 32]]],
+                 ['Normalize', [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]]]
+
+    gpu_to_use: 0
+    workers: 8
+    load_into_memory: true
+    train_val_split: [0.8, 0.2]
+model:
+  name: "resnet18"
+  params:
+    num_classes: 37
+    pretrained: False
+loss:
+  name: 'CrossEntropyLoss'
+  params:
+    weight: null
+optimizer:
+  name: 'Adam'
+  params:
+    lr: 0.001
+    weight_decay: 0.000001
+lr_policy:
+  name: 'ExponentialLR'
+  params:
+    gamma: 0.9

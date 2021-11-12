@@ -19,7 +19,7 @@ def make_transform_composition(transformation_list, split):
     """
     compose_list = []
     if split == 'val':
-        transformation_list = transformation_list[-2:]
+        transformation_list = transformation_list[-3:]
 
     for item in transformation_list:
         if hasattr(transforms, item[0]):
@@ -44,17 +44,11 @@ class TrafficSignDataloader(data.Dataset):
 
     def __getitem__(self, item):
         path, label = self.paths[item], self.labels[item]
-        with Image.open(path) as im:
-            input_image = np.array(im, dtype=np.float32) / 255
 
         # make the input tensors
-        input_image = np.transpose(input_image, [2, 0, 1])
-        torch_input_image = torch.as_tensor(input_image, dtype=torch.float32, device=DEVICE)
-        torch_label = torch.as_tensor(int(label), dtype=torch.long, device=DEVICE)
-        # torch_one_hot_labels = one_hot(torch_label, num_classes=self.config.num_classes)
-
-        # run the transform on the image
-        torch_input_image = self.transforms(torch_input_image)
+        with Image.open(path) as im:
+            torch_input_image = self.transforms(im)
+        torch_label = torch.as_tensor(int(label), dtype=torch.long)
 
         return {'paths': path, 'input_images': torch_input_image, 'labels': torch_label}
 

@@ -1,10 +1,10 @@
-name: traffic_sign_recognition1
+name: traffic_sign_recognition
 channels:
   - pytorch
   - conda-forge
   - defaults
 dependencies:
-  - cudatoolkit=11.2
+  - cudatoolkit=11.3
   - cudnn
   - ipython
   - matplotlib

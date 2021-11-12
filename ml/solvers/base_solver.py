@@ -193,6 +193,9 @@ class Solver(object):
             # start measuring preproc time
             preproc_t_start = time.time()
             for idx, minibatch in enumerate(self.loader):
+                if DEVICE == torch.device('cuda'):
+                    minibatch = {key: value.to(device='cuda') if isinstance(value, torch.Tensor) else value
+                                 for key, value in minibatch.items()}
                 preproc_time = time.time() - preproc_t_start
 
                 # train

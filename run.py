@@ -30,11 +30,6 @@ parser.add_argument('-c', '--config', type=str, default='base',
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    try:
-        set_start_method('spawn')
-    except RuntimeError:
-        pass
-
     config = ConfigNamespace(args.config)
     set_random_seed(config.env.random_seed)
     logging.info(f'Using {DEVICE} for running.')

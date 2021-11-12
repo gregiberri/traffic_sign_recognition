@@ -36,7 +36,8 @@ class Metrics(object):
                 writer.writeheader()
 
     def compute_metric(self, pred, gt):
-        self.current_metric = {key: float(metric(pred, gt)) for key, metric in self.metrics.items()}
+        self.current_metric = {key: float(metric(pred.detach().cpu(), gt.detach().cpu()))
+                               for key, metric in self.metrics.items()}
         return self.current_metric
 
     def get_snapshot_info(self):

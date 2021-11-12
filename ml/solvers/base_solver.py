@@ -98,7 +98,7 @@ class Solver(object):
         Dataloader initialization(s) for train, val and test dataset according to the config.
         """
         logging.info("Initializing dataloaders.")
-        if self.phase == 'train' or self.phase == 'resume':
+        if self.phase == 'train':
             self.train_loader = get_dataloader(self.config.data, 'train')
         else:
             raise ValueError(f'Wrong args mode: {self.args.mode}')
@@ -109,42 +109,13 @@ class Solver(object):
         Initialize the metrics to follow the performance during training and validation (or testing).
         """
         logging.info("Initializing metrics.")
-        if self.phase == 'train' or self.phase == 'resume':
+        if self.phase == 'train':
             self.train_metric = Metrics(self.result_dir, 'train', self.config.metrics)
         elif self.phase == 'test':
             return
         else:
             raise ValueError(f'Wrong args mode: {self.args.mode}')
         self.val_metric = Metrics(self.result_dir, 'val', self.config.metrics)
-
-    def load_checkpoint(self):
-        """
-        Set the current mode (train or eval) and load the model and the hyperparameters from a trained model checkpoint.
-        """
-        logging.info("Loading checkpoint.")
-        if self.phase == 'val' or self.phase == 'test' or self.phase == 'resume':
-            self.init_from_checkpoint()
-
-    def init_from_checkpoint(self):
-        """
-        Load the model and the hyperparameters from a trained model checkpoint.
-        """
-        path = os.path.join(self.result_dir, self.get_model_string() + '.pth')
-
-        logging.info(f"Loading the model from: {path}")
-        continue_state_object = torch.load(path, map_location=torch.device("cpu"))
-
-        self.config = continue_state_object['config']
-        self.metric = continue_state_object['metric']
-        self.epoch = continue_state_object['epoch']
-
-        load_model(self.model, continue_state_object['model'], distributed=False)
-        self.model.cuda()
-
-        self.optimizer.load_state_dict(continue_state_object['optimizer'])
-        self.lr_policy.load_state_dict(continue_state_object['lr_policy'])
-
-        del continue_state_object
 
     def before_epoch(self):
         """
@@ -177,7 +148,7 @@ class Solver(object):
         print()
 
     def run(self):
-        if self.phase == 'train' or self.phase == 'resume':
+        if self.phase == 'train':
             self.current_mode = 'train'
             self.train()
         elif self.phase == 'val' or self.phase == 'test':
@@ -201,6 +172,7 @@ class Solver(object):
             logging.info(f"Start evaluating epoch: {self.epoch}/{self.epochs}")
             self.eval()
             self.lr_policy.step(*get_lr_policy_parameter(self))
+            self.save_best_checkpoint()
         # self.writer.close()
 
     def eval(self):
@@ -208,7 +180,6 @@ class Solver(object):
         with torch.no_grad():
             self.run_epoch()
             if self.phase != 'test': ...  # save results to csv
-            if self.phase in ['train', 'resume']: self.save_best_checkpoint()
 
     def run_epoch(self):
         """
@@ -301,30 +272,47 @@ class Solver(object):
         """
         Save the model if the last epoch result is the best.
         """
-        epoch_results = self.metric.epoch_results
+        epoch_results = self.val_metric.epoch_results[self.config.metrics.goal_metric]
 
-        if not min(epoch_results['acc']) == epoch_results['acc'][-1]:
+        if not max(epoch_results) == epoch_results[-1]:
             return
 
-        path = os.path.join(self.result_dir, self.get_model_string() + '.pth')
+        path = os.path.join(self.result_dir, 'model_best.pth.tar')
 
-        state_dict = {}
-        from collections import OrderedDict
-        new_state_dict = OrderedDict()
-        for k, v in self.model.state_dict().items():
-            key = k
-            if k.split('.')[0] == 'module':
-                key = k[7:]
-            new_state_dict[key] = v
-
-        state_dict['config'] = self.config
-        state_dict['model'] = new_state_dict
-        state_dict['optimizer'] = self.optimizer.state_dict()
-        state_dict['lr_policy'] = self.lr_policy.state_dict()
-        state_dict['epoch'] = self.epoch
-        state_dict['metric'] = self.metric
+        state_dict = {'epoch': self.epoch,
+                      'optimizer': self.optimizer.state_dict(),
+                      'lr_policy': self.lr_policy.state_dict(),
+                      'train_metric': self.train_metric,
+                      'val_metric': self.val_metric,
+                      'config': self.config,
+                      'model': self.model.state_dict()}
 
         torch.save(state_dict, path)
         del state_dict
-        del new_state_dict
-        logging.info(f"\nSave checkpoint to file {path}")
+        logging.info(f"Saved checkpoint to file {path}\n")
+
+    def load_checkpoint(self):
+        """
+        If a saved model in the result folder exists load the model and the hyperparameters from a trained model checkpoint.
+        """
+        path = os.path.join(self.result_dir, 'model_best.pth.tar')
+        if not os.path.exists(path):
+            return
+
+        logging.info(f"Loading the checkpoint from: {path}")
+        continue_state_object = torch.load(path, map_location=torch.device("cpu"))
+
+        # load the needed things from the checkpoint
+        if self.phase == 'train':
+            self.optimizer.load_state_dict(continue_state_object['optimizer'])
+            self.lr_policy.load_state_dict(continue_state_object['lr_policy'])
+            self.train_metric = continue_state_object['train_metric']
+        if self.phase != 'test':
+            self.val_metric = continue_state_object['val_metric']
+
+        self.epoch = continue_state_object['epoch']
+        self.config = continue_state_object['config']
+        self.model.load_state_dict(continue_state_object['model'])
+        if DEVICE == torch.device('cuda'): self.model.cuda()
+
+        del continue_state_object

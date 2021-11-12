@@ -9,8 +9,10 @@ from data.datasets import get_dataloader
 from ml.metrics.metrics import Metrics
 from ml.models import get_model
 from ml.modules.losses import get_loss
-from ml.optimizers import get_optimizer, get_lr_policy
+from ml.optimizers import get_optimizer, get_lr_policy, get_lr_policy_parameter
 from tqdm import tqdm
+
+from utils.device import DEVICE
 
 
 class Solver(object):
@@ -65,7 +67,7 @@ class Solver(object):
         """
         logging.info("Initializing the model.")
         self.model = get_model(self.config.model)
-        # self.model.cuda() todo
+        if DEVICE == torch.device('cuda'): self.model.cuda()
 
     def init_loss(self):
         """
@@ -172,6 +174,7 @@ class Solver(object):
                                                  self.epoch)
         gc.collect()
         torch.cuda.empty_cache()
+        print()
 
     def run(self):
         if self.phase == 'train' or self.phase == 'resume':
@@ -183,7 +186,7 @@ class Solver(object):
         else:
             raise ValueError(f'Wrong phase: {self.phase}')
 
-        return  # self.val_metric
+        return max(self.val_metric.epoch_results[self.config.metrics.goal_metric])
 
     def train(self):
         """
@@ -197,7 +200,7 @@ class Solver(object):
             self.run_epoch()
             logging.info(f"Start evaluating epoch: {self.epoch}/{self.epochs}")
             self.eval()
-        return max(self.val_metric.epoch_results[self.config.metrics.goal_metric])
+            self.lr_policy.step(*get_lr_policy_parameter(self))
         # self.writer.close()
 
     def eval(self):
@@ -205,7 +208,7 @@ class Solver(object):
         with torch.no_grad():
             self.run_epoch()
             if self.phase != 'test': ...  # save results to csv
-            if self.phase in ['train', 'resume']: ...# self.save_best_checkpoint()
+            if self.phase in ['train', 'resume']: self.save_best_checkpoint()
 
     def run_epoch(self):
         """
@@ -265,7 +268,6 @@ class Solver(object):
         # + self.metric.get_snapshot_info() \
         pbar.set_description(print_str, refresh=False)
 
-
     def write_to_tensorboard(self):
         ...
         # write on tensorboard
@@ -285,12 +287,11 @@ class Solver(object):
         output = self.model(minibatch['input_images'])
 
         if self.current_mode == 'train':
-            # backward
+            # training step
             self.optimizer.zero_grad()
             loss = self.loss(output, minibatch['labels'])
             loss.backward()
             self.optimizer.step()
-            self.lr_policy.step(self.epoch)
         else:
             loss = 0
 

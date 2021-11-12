@@ -13,9 +13,9 @@ import warnings
 from config import ConfigNamespace
 # from ml.solvers.hpo_solver import HPOSolver
 from ml.solvers.base_solver import Solver
+from utils.device import DEVICE
 from utils.init_random_seeds import set_random_seed
 
-warnings.filterwarnings("ignore")
 logging.basicConfig(format='[%(asctime)s %(levelname)s] %(message)s',
                     datefmt='%Y/%m/%d %H:%M:%S',
                     level=logging.INFO)
@@ -32,6 +32,7 @@ args = parser.parse_args()
 if __name__ == '__main__':
     config = ConfigNamespace(args.config)
     set_random_seed(config.env.random_seed)
+    logging.info(f'Using {DEVICE} for running.')
 
     # run a simple training/val or an HPO
     if args.mode == 'hpo':

@@ -4,7 +4,7 @@ env:
   random_seed: 0
   epochs: 30
 metrics:
-  goal_metric: 'f1'
+  goal_metric: 'F1'
   save_metrics:
     Accuracy: {num_classes: 37, average: 'macro'}
     Precision: {num_classes: 37, average: 'macro'}
@@ -39,11 +39,13 @@ loss:
   params:
     alpha: null
 optimizer:
-  name: 'Ranger'
+  name: 'Adam'
   params:
     lr: 0.001
-    weight_decay: 0.00001
+    weight_decay: 0.0001
 lr_policy:
-  name: 'ExponentialLR'
+  name: 'ReduceLROnPlateau'
   params:
-    gamma: 0.9
+#    gamma: 0.99
+    mode: 'max'
+    patience: 5

@@ -37,3 +37,17 @@ def get_lr_policy(lr_policy_config, optimizer):
         return function(optimizer=optimizer, **lr_policy_config.params.dict())
     else:
         raise ValueError(f'Wrong lr_policy name: {lr_policy_config.name}')
+
+
+def get_lr_policy_parameter(solver):
+    """
+    Get the parameters for the lr policy function.
+
+    :param solver: the solver object to reach the lr_policy and usable parameters
+    :return: the lr_policy parameters in a list
+    """
+
+    if solver.lr_policy.__class__.__name__ == 'ReduceLROnPlateau':
+        return [solver.val_metric.epoch_results[solver.config.metrics.goal_metric][-1]]
+    else:
+        return [solver.epoch]

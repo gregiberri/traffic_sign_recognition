@@ -293,7 +293,8 @@ class Solver(object):
 
     def load_checkpoint(self):
         """
-        If a saved model in the result folder exists load the model and the hyperparameters from a trained model checkpoint.
+        If a saved model in the result folder exists load the model
+        and the hyperparameters from a trained model checkpoint.
         """
         path = os.path.join(self.result_dir, 'model_best.pth.tar')
         if not os.path.exists(path):

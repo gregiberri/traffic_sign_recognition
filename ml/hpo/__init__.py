@@ -1,29 +1,24 @@
+from ray.tune.suggest.basic_variant import BasicVariantGenerator
 from ray.tune.suggest.bayesopt import BayesOptSearch
 from ray.tune.suggest.bohb import TuneBOHB
 from ray.tune.suggest.dragonfly import DragonflySearch
 from ray.tune.suggest.hyperopt import HyperOptSearch
 from ray.tune.suggest.skopt import SkOptSearch
+from ray.tune.suggest.nevergrad import NevergradSearch
+
+modules = [element for element in dir() if '__' not in element]
 
 
-def get_hpo_algorithm(config):
+def get_hpo_algorithm(hpo_config):
     """
-    Choose which hyperparameter optimization algorithm to use.
+    Get the hpo algorithm according to the hpo config name and parameters.
 
-    :param config: config containing the name and the parameters of the hpo algo
-
-    :return: hpo algorithm
+    :param hpo_config: config containing the hpo name as config.name and the parameters as config.params
+    :return: the hpo algorithm object
     """
-    if config.name == 'default':
-        return None
-    elif config.name == 'bayesian':
-        return BayesOptSearch(**config.params.dict())
-    elif config.name == 'bohb':
-        return TuneBOHB(**config.params.dict())
-    elif config.name == 'dragonfly':
-        return DragonflySearch(**config.params.dict())
-    elif config.name == 'hebo':
-        return HyperOptSearch(**config.params.dict())
-    elif config.name == 'scikit':
-        return SkOptSearch(**config.params.dict())
+
+    if hpo_config.name in modules:
+        function = globals()[hpo_config.name]
+        return function(**hpo_config.params.dict())
     else:
-        raise ValueError(f'Wrong hyperoptimizer name: {config.name}')
+        raise ValueError(f'Wrong hyperoptimizer name: {hpo_config.name}')

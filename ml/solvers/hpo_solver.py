@@ -2,6 +2,7 @@ import os
 import sys
 
 from ray import tune
+from contextlib import contextmanager
 
 from config import ConfigNamespace
 from ml.hpo import get_hpo_algorithm
@@ -17,7 +18,6 @@ class HPOSolver(object):
         :param args: arguments of the training
         """
         self.args = args
-        self.phase = args.mode
         self.config = config
 
         self.experiment_number = 0
@@ -79,13 +79,23 @@ class HPOSolver(object):
         args = self.args
         args.mode = 'train'
         args.id_tag = os.path.join(*tune.get_trial_dir().split('/')[-3:-1])
-
         config = ConfigNamespace(search_space)
-        config.id = os.path.join(config.id, 'outputs')
+        config.id = os.path.join(config.id, 'hpo_outputs')
 
-        solver = Solver(config, args)
-        metric = solver.run()
+        with suppress_stdout():  # do not print out the Solvers` output
+            solver = Solver(config, args)
+            metric = solver.run()
 
-        tune.report(accuracy=max(metric.epoch_results['acc']))
+        tune.report(metric)
+        return metric
 
-        return max(metric.epoch_results['acc'])
+
+@contextmanager
+def suppress_stdout():
+    with open(os.devnull, "w") as devnull:
+        old_stdout = sys.stdout
+        sys.stdout = devnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout

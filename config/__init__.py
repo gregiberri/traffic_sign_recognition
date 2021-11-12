@@ -1,3 +1,5 @@
+import os
+
 from ray import tune
 import yaml
 
@@ -38,6 +40,7 @@ class ConfigNamespace(object):
         """
         Load namespace from yaml file
         """
+        path = os.path.join('config', 'config_files', path + '.yaml')
         with open(path) as f:
             config = yaml.safe_load(f)
         self.update(config)

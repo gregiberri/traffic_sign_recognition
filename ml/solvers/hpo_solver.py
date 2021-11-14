@@ -45,7 +45,6 @@ class HPOSolver(object):
                                                "gpu": self.config.hpo.gpu_per_trial},
                           search_alg=search_alg)
 
-        self.report_result(result)
 
     def report_result(self, result):
         """

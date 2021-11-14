@@ -1,17 +1,23 @@
 id: "base_hpo"
 base_config: 'base'
 hpo:
-  num_samples: 50
+  num_samples: 100
   cpu_per_trial: 2
-  gpu_per_trial: 0.15
+  gpu_per_trial: 0.20
   hpo_algorithm:
-    name: 'HyperOptSearch'
+    name: 'SkOptSearch'
     params:
       mode: 'max'
+data:
+  params:
+    balanced_classes: ['choice', [['', 'true']]]
+model:
+  params:
+    pretrained: ['choice', [['', 'true']]]
 optimizer:
   name: ['choice', [['Adam', 'RAdam', 'Ranger']]]
   params:
-    lr: ['loguniform', [0.0001, 0.005]]
-    weight_decay: ['loguniform', [0.00001, 0.001]]
+    lr: ['loguniform', [0.0001, 0.01]]
+    weight_decay: ['loguniform', [0.000001, 0.001]]
 loss:
   name: ['choice', [['CrossEntropyLoss', 'FocalLoss']]]

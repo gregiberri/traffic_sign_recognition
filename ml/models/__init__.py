@@ -13,7 +13,7 @@ def get_model(model_config):
 
     if hasattr(torch_models, model_config.name):
         function = getattr(torch_models, model_config.name)
-        model = function(model_config.params.pretrained)
+        model = function(bool(model_config.params.pretrained))
 
         # change the head
         if hasattr(model, 'fc'):

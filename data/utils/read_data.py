@@ -11,9 +11,3 @@ def read_paths(data_folder):
 
 def read_image_paths_in_folder(folder):
     return glob.glob(os.path.join(folder, '*.jpg'))
-
-
-if __name__ == '__main__':
-    paths = read_paths('/home/albert/data/R-jpg')
-
-    asd = 1

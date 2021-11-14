@@ -14,8 +14,7 @@ def get_loss(loss_config):
     :param loss_config: config containing the lr_policy name as config.name and the parameters as config.params
     :return: the loss function
     """
-
-    if hasattr(torch_losses, loss_config.name):
+    if hasattr(torch_losses, str(loss_config.name)):
         function = getattr(torch_losses, loss_config.name)
         return function(**loss_config.params.dict())
     if loss_config.name == 'FocalLoss':

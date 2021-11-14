@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import torch
+from tensorboardX import SummaryWriter
 
 from data.datasets import get_dataloader
 from ml.metrics.metrics import Metrics
@@ -37,10 +38,8 @@ class Solver(object):
         self.init_optimizer()
         self.init_lr_policy()
         self.init_metrics()
-
         self.load_checkpoint()
-
-        # self.visualizer = Visualizer(self.writer)
+        self.writer = SummaryWriter(os.path.join(self.result_dir, 'tensorboard'))
 
     def init_results_dir(self):
         """
@@ -127,6 +126,7 @@ class Solver(object):
             self.model.train()
             self.loader = self.train_loader
             self.metric = self.train_metric
+            self.loader.dataset.sample_classes()
         elif self.current_mode == 'val':
             self.model.eval()
             self.loader = self.val_loader
@@ -142,7 +142,11 @@ class Solver(object):
         if self.phase != 'test':
             self.metric.compute_epoch_end_metric(torch.cat(self.results['preds'], 0),
                                                  torch.cat(self.results['labels'], 0),
+                                                 self.writer,
                                                  self.epoch)
+            for key, value in self.metric.current_metric.items(): self.writer.add_scalar(f'{self.current_mode}/{key}',
+                                                                                         value, self.epoch)
+
         gc.collect()
         torch.cuda.empty_cache()
         print()
@@ -203,19 +207,27 @@ class Solver(object):
                 output, loss = self.step(minibatch)
                 train_time = time.time() - train_t_start
 
+                # save for calculating the full epoch metrics (the dataset is small so it can fit into the memory)
+                # the calculated metrics are `macro` average to be less sensitive to the class imbalance
+                # with larger datasets running metrics are suggested
+                # large datasets usually less affected by class imbalance too
+                self.results['paths'].append(minibatch['paths'])
+                self.results['preds'].append(output)
+                self.results['labels'].append(minibatch['labels'])
+
                 if self.phase != 'test':
                     self.metric.compute_metric(output, minibatch['labels'])
-
-                    # save for calculating the full epoch metrics (the dataset is small so it can fit into the memory)
-                    # the calculated metrics are `macro` average to be less sensitive to the class imbalance
-                    # with larger datasets running metrics are suggested
-                    # large datasets usually less affected by class imbalance too
-                    self.results['paths'].append(minibatch['paths'])
-                    self.results['preds'].append(output)
-                    self.results['labels'].append(minibatch['labels'])
-
                     self.update_bar_description(pbar, idx, preproc_time, train_time, loss)
                     # self.write_to_tensorboard()
+
+                    # write to tensorboard
+                    writer_iteration = self.epoch * len(self.loader) + idx
+                    self.writer.add_image(f'{self.current_mode}/image', minibatch['input_images'][0].cpu() * \
+                                          torch.Tensor([[[0.1560]], [[0.1815]], [[0.1727]]]) + \
+                                          torch.Tensor([[[0.4432]], [[0.3938]], [[0.3764]]]),
+                                          writer_iteration)
+                    if self.current_mode == 'train':
+                        self.writer.add_scalar('loss', loss, writer_iteration)
 
                 pbar.update(1)
                 preproc_t_start = time.time()

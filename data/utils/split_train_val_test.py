@@ -60,3 +60,16 @@ def save_csv(columns, filename):
     with open(filename, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerows(zip(*columns))
+
+
+def load_csv(filename):
+    """
+    Load the columns of a csv files in the dir under filename.csv
+
+    :param filename: the path for the csv file to be load
+    :return: the data inside the csv
+    """
+    with open(filename, "r", newline="") as f:
+        csv_input = csv.reader(f)
+        data = [row for row in csv_input]
+    return data

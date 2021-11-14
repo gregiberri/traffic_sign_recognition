@@ -15,7 +15,7 @@ def get_optimizer(optimizer_config, model_params):
     if hasattr(optim, optimizer_config.name):
         function = getattr(optim, optimizer_config.name)
         return function(params=model_params, **optimizer_config.params.dict())
-    elif optimizer_config.name == 'RAdam':  # todo: delete
+    elif optimizer_config.name == 'RAdam':
         return RAdam(params=model_params, **optimizer_config.params.dict())
     elif optimizer_config.name == 'Ranger':
         return Ranger(params=model_params, **optimizer_config.params.dict())

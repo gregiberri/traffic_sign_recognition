@@ -1,4 +1,5 @@
 import csv
+import glob
 import os
 from collections import Counter
 from warnings import warn
@@ -21,6 +22,8 @@ class TrafficSignDataloader(data.Dataset):
         self.split = split
 
         self.original_paths, self.original_labels = self.load_labels_and_paths()
+
+        # undersample the overpresented, and oversample the underpresented classes
         if self.split == 'train' and self.config.balanced_classes:
             self.class_sample_numbers = self.dataset_balance_class_probabilities()
             self.sample_classes()
@@ -30,17 +33,22 @@ class TrafficSignDataloader(data.Dataset):
         self.transforms = make_transform_composition(self.config.transforms, self.split)
 
     def __getitem__(self, item):
-        path, label = self.paths[item], self.labels[item]
-
-        # make the input tensors
+        # load input image
+        path = self.paths[item]
         with Image.open(path) as im:
-            torch_input_image = self.transforms(im)
-        torch_label = torch.as_tensor(int(label), dtype=torch.long)
+            input_image = self.transforms(im)
 
-        return {'paths': path, 'input_images': torch_input_image, 'labels': torch_label}
+        # use the labels if we have them (during train and val) otherwise use a [] placeholder
+        if self.labels is not None:
+            label = self.labels[item]
+            label = torch.as_tensor(int(label), dtype=torch.long)
+        else:
+            label = []
+
+        return {'paths': path, 'input_images': input_image, 'labels': label}
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.paths)
 
     def load_labels_and_paths(self):
         """
@@ -55,10 +63,10 @@ class TrafficSignDataloader(data.Dataset):
         if not os.path.exists(split_file_path):
             if self.split == 'train':
                 split_train_val(self.config.train_val_split, self.config.dataset_path)
-            elif self.split == 'val':
-                ...
+            elif self.split == 'test':
+                return glob.glob(os.path.join(self.config.dataset_path, '*.jpg')), None
             else:
-                raise ValueError(f'Wrong split: {self.split}')
+                raise ValueError(f'Mode should be `train` for train-val split or `test` for testing on images.')
 
         with open(split_file_path, newline='') as f:
             reader = csv.reader(f)

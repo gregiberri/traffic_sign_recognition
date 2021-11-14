@@ -7,13 +7,14 @@ import torch
 from tensorboardX import SummaryWriter
 
 from data.datasets import get_dataloader
+from data.utils.split_train_val_test import save_csv, load_csv
 from ml.metrics.metrics import Metrics
 from ml.models import get_model
 from ml.modules.losses import get_loss
 from ml.optimizers import get_optimizer, get_lr_policy, get_lr_policy_parameter
 from tqdm import tqdm
 
-from utils.device import DEVICE
+from utils.device import DEVICE, put_minibatch_to_device
 
 
 class Solver(object):
@@ -99,9 +100,9 @@ class Solver(object):
         logging.info("Initializing dataloaders.")
         if self.phase == 'train':
             self.train_loader = get_dataloader(self.config.data, 'train')
-        else:
-            raise ValueError(f'Wrong args mode: {self.args.mode}')
-        self.val_loader = get_dataloader(self.config.data, 'val')
+            self.val_loader = get_dataloader(self.config.data, 'val')
+        if self.phase == 'val' or self.phase == 'test':
+            self.val_loader = get_dataloader(self.config.data, self.phase)
 
     def init_metrics(self):
         """
@@ -112,8 +113,6 @@ class Solver(object):
             self.train_metric = Metrics(self.result_dir, 'train', self.config.metrics)
         elif self.phase == 'test':
             return
-        else:
-            raise ValueError(f'Wrong args mode: {self.args.mode}')
         self.val_metric = Metrics(self.result_dir, 'val', self.config.metrics)
 
     def before_epoch(self):
@@ -130,7 +129,7 @@ class Solver(object):
         elif self.current_mode == 'val':
             self.model.eval()
             self.loader = self.val_loader
-            self.metric = self.val_metric
+            if self.phase != 'test': self.metric = self.val_metric
         else:
             raise ValueError(f'Wrong solver mode: {self.current_mode}')
         torch.cuda.empty_cache()
@@ -161,7 +160,7 @@ class Solver(object):
         else:
             raise ValueError(f'Wrong phase: {self.phase}')
 
-        return max(self.val_metric.epoch_results[self.config.metrics.goal_metric])
+        return max(self.val_metric.epoch_results[self.config.metrics.goal_metric]) if self.phase == 'train' else None
 
     def train(self):
         """
@@ -177,13 +176,21 @@ class Solver(object):
             self.eval()
             self.lr_policy.step(*get_lr_policy_parameter(self))
             self.save_best_checkpoint()
-        # self.writer.close()
+        self.writer.close()
 
     def eval(self):
         self.current_mode = 'val'
         with torch.no_grad():
             self.run_epoch()
-            if self.phase != 'test': ...  # save results to csv
+            if self.phase == 'test':
+                # save results to csv
+                test_result_file = os.path.join(self.result_dir, 'test_results.csv')
+                classnumber_classnames = dict(load_csv('classnumber_classname.csv'))
+                pred_classnames = [classnumber_classnames[str(int(torch.argmax(pred).detach().cpu()))]
+                                   for pred in self.results['preds']]
+                paths = [path for sublist in self.results['paths'] for path in sublist]
+                save_csv([paths, pred_classnames], test_result_file)
+                logging.info(f'Predictions are saved into file: {test_result_file}')
 
     def run_epoch(self):
         """
@@ -197,9 +204,7 @@ class Solver(object):
             # start measuring preproc time
             preproc_t_start = time.time()
             for idx, minibatch in enumerate(self.loader):
-                if DEVICE == torch.device('cuda'):
-                    minibatch = {key: value.to(device='cuda') if isinstance(value, torch.Tensor) else value
-                                 for key, value in minibatch.items()}
+                minibatch = put_minibatch_to_device(minibatch)
                 preproc_time = time.time() - preproc_t_start
 
                 # train
@@ -213,12 +218,12 @@ class Solver(object):
                 # large datasets usually less affected by class imbalance too
                 self.results['paths'].append(minibatch['paths'])
                 self.results['preds'].append(output)
-                self.results['labels'].append(minibatch['labels'])
 
                 if self.phase != 'test':
+                    self.results['labels'].append(minibatch['labels'])
+
                     self.metric.compute_metric(output, minibatch['labels'])
                     self.update_bar_description(pbar, idx, preproc_time, train_time, loss)
-                    # self.write_to_tensorboard()
 
                     # write to tensorboard
                     writer_iteration = self.epoch * len(self.loader) + idx

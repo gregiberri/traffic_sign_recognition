@@ -11,7 +11,7 @@ def make_transform_composition(transformation_list, split):
     :return: transform
     """
     compose_list = []
-    if split == 'val':
+    if split == 'val' or split == 'test':
         transformation_list = transformation_list[-3:]
 
     for item in transformation_list:

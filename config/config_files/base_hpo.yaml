@@ -11,6 +11,7 @@ hpo:
 data:
   params:
     balanced_classes: ['choice', [['', 'true']]]
+    batch_size: ['uniform', [50, 300]]
 model:
   params:
     pretrained: ['choice', [['', 'true']]]
@@ -20,4 +21,7 @@ optimizer:
     lr: ['loguniform', [0.0001, 0.01]]
     weight_decay: ['loguniform', [0.000001, 0.001]]
 loss:
-  name: ['choice', [['CrossEntropyLoss', 'FocalLoss']]]
+#  name: ['choice', [['CrossEntropyLoss', 'FocalLoss']]]
+   name: 'FocalLoss'
+   params:
+     gamma: ['uniform', [0.5, 3]]

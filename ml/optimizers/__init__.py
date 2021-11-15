@@ -42,12 +42,13 @@ def get_lr_policy(lr_policy_config, optimizer):
 def get_lr_policy_parameter(solver):
     """
     Get the parameters for the lr policy function.
+    Some lr policies need the epoch results (`like ReduceOnPlateau`), some need the current epoch number.
 
     :param solver: the solver object to reach the lr_policy and usable parameters
     :return: the lr_policy parameters in a list
     """
 
     if solver.lr_policy.__class__.__name__ == 'ReduceLROnPlateau':
-        return [solver.val_metric.epoch_results[solver.config.metrics.goal_metric][-1]]
+        return [solver.iohandler.val_metric.epoch_results[solver.config.metrics.goal_metric][-1]]
     else:
         return [solver.epoch]

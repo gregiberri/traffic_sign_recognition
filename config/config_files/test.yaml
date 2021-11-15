@@ -1,4 +1,4 @@
-id: "test"
+id: "base"
 base_config: 'base'
 data:
   params:

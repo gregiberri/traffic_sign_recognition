@@ -60,7 +60,7 @@ class Metrics(object):
             writer = csv.DictWriter(csv_file, fieldnames=self.result_names)
             writer.writerow(metric)
 
-    def compute_epoch_end_metric(self, epoch_pred, epoch_gt, writer, epoch):
+    def compute_epoch_metric(self, epoch_pred, epoch_gt, writer, epoch):
         epoch_metric = self.compute_metric(epoch_pred, epoch_gt)
         self.save_metrics(epoch_metric)
         self.epoch_results = {key: results + [epoch_metric[key]] for key, results in self.epoch_results.items()}

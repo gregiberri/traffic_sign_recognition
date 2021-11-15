@@ -15,6 +15,7 @@ from ml.optimizers import get_optimizer, get_lr_policy, get_lr_policy_parameter
 from tqdm import tqdm
 
 from utils.device import DEVICE, put_minibatch_to_device
+from utils.iohandler import IOHandler
 
 
 class Solver(object):
@@ -32,26 +33,12 @@ class Solver(object):
 
         # initialize the required elements for the ml problem
         self.init_epochs()
-        self.init_results_dir()
         self.init_dataloaders()
         self.init_model()
         self.init_loss()
         self.init_optimizer()
         self.init_lr_policy()
-        self.init_metrics()
-        self.load_checkpoint()
-        self.writer = SummaryWriter(os.path.join(self.result_dir, 'tensorboard'))
-
-    def init_results_dir(self):
-        """
-        Making results dir.
-        """
-        logging.info("Making result dir.")
-        result_name = os.path.join(self.config.id, self.args.id_tag) if self.args.id_tag else self.config.id
-        self.result_dir = os.path.join(self.config.env.result_dir, result_name)
-        if not os.path.exists(self.result_dir):
-            os.makedirs(self.result_dir)
-        logging.info(f"Results dir is made. Results will be saved at: {self.result_dir}")
+        self.iohandler = IOHandler(args, self)
 
     def init_epochs(self):
         """
@@ -104,32 +91,32 @@ class Solver(object):
         if self.phase == 'val' or self.phase == 'test':
             self.val_loader = get_dataloader(self.config.data, self.phase)
 
-    def init_metrics(self):
-        """
-        Initialize the metrics to follow the performance during training and validation (or testing).
-        """
-        logging.info("Initializing metrics.")
+    def run(self):
+        logging.info("Starting experiment.")
         if self.phase == 'train':
-            self.train_metric = Metrics(self.result_dir, 'train', self.config.metrics)
-        elif self.phase == 'test':
-            return
-        self.val_metric = Metrics(self.result_dir, 'val', self.config.metrics)
+            self.train()
+        elif self.phase == 'val' or self.phase == 'test':
+            self.eval()
+        else:
+            raise ValueError(f'Wrong phase: {self.phase}')
+
+        return self.iohandler.get_max_metric()
 
     def before_epoch(self):
         """
         Before every epoch set the model to the right mode (train or eval)
         and select the corresponding loader and metric.
         """
-        self.results = {'paths': [], 'preds': [], 'labels': []}
+        self.iohandler.reset_results()
         if self.current_mode == 'train':
             self.model.train()
             self.loader = self.train_loader
-            self.metric = self.train_metric
             self.loader.dataset.sample_classes()
+            self.iohandler.train()
         elif self.current_mode == 'val':
             self.model.eval()
             self.loader = self.val_loader
-            if self.phase != 'test': self.metric = self.val_metric
+            self.iohandler.val()
         else:
             raise ValueError(f'Wrong solver mode: {self.current_mode}')
         torch.cuda.empty_cache()
@@ -138,36 +125,16 @@ class Solver(object):
         """
         After every epoch collect some garbage, evaluate and reset the current metric.
         """
-        if self.phase != 'test':
-            self.metric.compute_epoch_end_metric(torch.cat(self.results['preds'], 0),
-                                                 torch.cat(self.results['labels'], 0),
-                                                 self.writer,
-                                                 self.epoch)
-            for key, value in self.metric.current_metric.items(): self.writer.add_scalar(f'{self.current_mode}/{key}',
-                                                                                         value, self.epoch)
-
+        self.iohandler.compute_epoch_metric()
         gc.collect()
         torch.cuda.empty_cache()
         print()
-
-    def run(self):
-        if self.phase == 'train':
-            self.current_mode = 'train'
-            self.train()
-        elif self.phase == 'val' or self.phase == 'test':
-            self.current_mode = 'val'
-            self.eval()
-        else:
-            raise ValueError(f'Wrong phase: {self.phase}')
-
-        return max(self.val_metric.epoch_results[self.config.metrics.goal_metric]) if self.phase == 'train' else None
 
     def train(self):
         """
         Training all the epochs with validation after every epoch.
         Save the model if it has better performance than the previous ones.
         """
-
         for self.epoch in range(self.epoch, self.epochs):
             logging.info(f"Start training epoch: {self.epoch}/{self.epochs}")
             self.current_mode = 'train'
@@ -175,22 +142,14 @@ class Solver(object):
             logging.info(f"Start evaluating epoch: {self.epoch}/{self.epochs}")
             self.eval()
             self.lr_policy.step(*get_lr_policy_parameter(self))
-            self.save_best_checkpoint()
-        self.writer.close()
+            self.iohandler.save_best_checkpoint()
+        self.iohandler.writer.close()
 
     def eval(self):
         self.current_mode = 'val'
         with torch.no_grad():
             self.run_epoch()
-            if self.phase == 'test':
-                # save results to csv
-                test_result_file = os.path.join(self.result_dir, 'test_results.csv')
-                classnumber_classnames = dict(load_csv('classnumber_classname.csv'))
-                pred_classnames = [classnumber_classnames[str(int(torch.argmax(pred).detach().cpu()))]
-                                   for pred in self.results['preds']]
-                paths = [path for sublist in self.results['paths'] for path in sublist]
-                save_csv([paths, pred_classnames], test_result_file)
-                logging.info(f'Predictions are saved into file: {test_result_file}')
+            self.iohandler.append_results_csv()
 
     def run_epoch(self):
         """
@@ -212,61 +171,13 @@ class Solver(object):
                 output, loss = self.step(minibatch)
                 train_time = time.time() - train_t_start
 
-                # save for calculating the full epoch metrics (the dataset is small so it can fit into the memory)
-                # the calculated metrics are `macro` average to be less sensitive to the class imbalance
-                # with larger datasets running metrics are suggested
-                # large datasets usually less affected by class imbalance too
-                self.results['paths'].append(minibatch['paths'])
-                self.results['preds'].append(output)
-
-                if self.phase != 'test':
-                    self.results['labels'].append(minibatch['labels'])
-
-                    self.metric.compute_metric(output, minibatch['labels'])
-                    self.update_bar_description(pbar, idx, preproc_time, train_time, loss)
-
-                    # write to tensorboard
-                    writer_iteration = self.epoch * len(self.loader) + idx
-                    self.writer.add_image(f'{self.current_mode}/image', minibatch['input_images'][0].cpu() * \
-                                          torch.Tensor([[[0.1560]], [[0.1815]], [[0.1727]]]) + \
-                                          torch.Tensor([[[0.4432]], [[0.3938]], [[0.3764]]]),
-                                          writer_iteration)
-                    if self.current_mode == 'train':
-                        self.writer.add_scalar('loss', loss, writer_iteration)
+                self.iohandler.append_results(minibatch, output)
+                self.iohandler.calculate_iteration_metrics(minibatch, output, loss, pbar, preproc_time, train_time, idx)
 
                 pbar.update(1)
                 preproc_t_start = time.time()
 
         self.after_epoch()
-
-    def update_bar_description(self, pbar, idx, preproc_time, train_time, loss):
-        """
-        Update the current log bar with the latest result.
-
-        :param pbar: pbar object
-        :param idx: iteration number in the epoch
-        :param preproc_time: time spent with preprocessing
-        :param train_time: time spent with training
-        :param loss: loss value
-        """
-        print_str = f'[{self.current_mode}] epoch {self.epoch}/{self.epochs} ' \
-                    + f'iter {idx + 1}/{len(self.loader)}:' \
-                    + f'lr:{self.optimizer.param_groups[0]["lr"]:.5f}|' \
-                    + f'loss: {loss:.3f}|' \
-                    + self.metric.get_snapshot_info() \
-                    + f'|t_prep: {preproc_time:.3f}s|' \
-                    + f't_train: {train_time:.3f}s'
-        # + self.metric.get_snapshot_info() \
-        pbar.set_description(print_str, refresh=False)
-
-    def write_to_tensorboard(self):
-        ...
-        # write on tensorboard
-        # if idx % self.config.env.save_train_frequency == 0:
-        #     self.visualizer.visualize(minibatch, pred, self.epoch, tag='train')
-        #     metric.add_scalar(self.writer, iteration=idx)
-
-        # start measuring preproc time
 
     def step(self, minibatch):
         """
@@ -287,53 +198,3 @@ class Solver(object):
             loss = 0
 
         return output, loss
-
-    def save_best_checkpoint(self):
-        """
-        Save the model if the last epoch result is the best.
-        """
-        epoch_results = self.val_metric.epoch_results[self.config.metrics.goal_metric]
-
-        if not max(epoch_results) == epoch_results[-1]:
-            return
-
-        path = os.path.join(self.result_dir, 'model_best.pth.tar')
-
-        state_dict = {'epoch': self.epoch,
-                      'optimizer': self.optimizer.state_dict(),
-                      'lr_policy': self.lr_policy.state_dict(),
-                      'train_metric': self.train_metric,
-                      'val_metric': self.val_metric,
-                      'config': self.config,
-                      'model': self.model.state_dict()}
-
-        torch.save(state_dict, path)
-        del state_dict
-        logging.info(f"Saved checkpoint to file {path}\n")
-
-    def load_checkpoint(self):
-        """
-        If a saved model in the result folder exists load the model
-        and the hyperparameters from a trained model checkpoint.
-        """
-        path = os.path.join(self.result_dir, 'model_best.pth.tar')
-        if not os.path.exists(path):
-            return
-
-        logging.info(f"Loading the checkpoint from: {path}")
-        continue_state_object = torch.load(path, map_location=torch.device("cpu"))
-
-        # load the needed things from the checkpoint
-        if self.phase == 'train':
-            self.optimizer.load_state_dict(continue_state_object['optimizer'])
-            self.lr_policy.load_state_dict(continue_state_object['lr_policy'])
-            self.train_metric = continue_state_object['train_metric']
-        if self.phase != 'test':
-            self.val_metric = continue_state_object['val_metric']
-
-        self.epoch = continue_state_object['epoch']
-        self.config = continue_state_object['config']
-        self.model.load_state_dict(continue_state_object['model'])
-        if DEVICE == torch.device('cuda'): self.model.cuda()
-
-        del continue_state_object

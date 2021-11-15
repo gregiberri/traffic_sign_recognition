@@ -2,14 +2,13 @@ import csv
 import glob
 import os
 from collections import Counter
-from warnings import warn
 import numpy as np
 import torch
 from PIL import Image
 from torch.utils import data
 
 from data.transforms.make_transform import make_transform_composition
-from data.utils.split_train_val_test import split_train_val
+from data.utils.split_train_val import split_train_val
 
 
 class TrafficSignDataloader(data.Dataset):
@@ -52,9 +51,9 @@ class TrafficSignDataloader(data.Dataset):
 
     def load_labels_and_paths(self):
         """
-        Load data paths and labels according to the current split (train/val/test)
-        from the corresponding csv file in the dataset path.
-        During training if the csv file does not exist make one for the 3 splits.
+        Load data paths and labels according to the current split (train/val)
+        from the corresponding csv file in the dataset path (from the config).
+        During training if the csv file does not exist make one for the train/val splits.
         During eval if the csv file does not exist use the whole dataset for evaluation.
 
         :return: [paths, labels]: list of the paths and list of the corresponding labels
@@ -77,17 +76,21 @@ class TrafficSignDataloader(data.Dataset):
 
     def dataset_balance_class_probabilities(self):
         """
-        Calculate how many elemenents to sample by class. Do not have more than 10 sample from one datapoint.
+        Calculate how many elemenents to sample by class. Do not have more than 10x sample from one class.
         :return: dictionary of the sample numbers by class (either the mean of the sample numbers or 10xclass_size)
         """
-        class_numbers = list(Counter(self.original_labels).keys())  # equals to list(set(words))
-        class_sizes = list(Counter(self.original_labels).values())  # counts the elements' frequency
+        class_numbers = list(Counter(self.original_labels).keys())
+        class_sizes = list(Counter(self.original_labels).values())
         class_sizes_mean = np.mean(class_sizes)
 
         return {int(class_number): int(min(class_sizes_mean, class_size * 10))
                 for class_number, class_size in zip(class_numbers, class_sizes)}
 
     def sample_classes(self):
+        """
+        Make the over or undersampling. This should be rerun after every epoch for
+        new samples to use all the samples from the dataset.
+        """
         if not self.config.balanced_classes:
             return
 

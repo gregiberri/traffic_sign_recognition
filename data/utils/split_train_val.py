@@ -12,17 +12,17 @@ def get_paths_and_labels(data_dir):
     save the classnumber-classname file into classname_classnumber.csv.
 
     :param data_dir: the directory of the data: the csv files will be saved here
-    :return: data, labels
+    :return: paths, labels
     """
     data_dict = read_paths(data_dir)
     names_numbers = dict(zip(data_dict.keys(), list(range(len(data_dict.keys())))))
     # split the data_dict and get lists of the paths and the corresponding label numbers
-    data, labels = zip(*[[value, names_numbers[key]] for key, value_list in data_dict.items() for value in value_list])
-    assert len(data) and len(labels) and len(data) == len(labels), \
+    paths, labels = zip(*[[value, names_numbers[key]] for key, value_list in data_dict.items() for value in value_list])
+    assert len(paths) and len(labels) and len(paths) == len(labels), \
         f'Something went wrong with the read data paths and labels ({data_dir})'
     save_csv([names_numbers.values(), names_numbers.keys()], 'classnumber_classname.csv')
 
-    return data, labels
+    return paths, labels
 
 
 def split_train_val(split_rates, data_dir):
@@ -34,7 +34,7 @@ def split_train_val(split_rates, data_dir):
     :param data_dir: the directory of the data: the csv files will be saved here
     :return: (x_train, x_val, x_test, y_train, y_val, y_test) splitted datas and labels
     """
-    assert sum(split_rates) == 1.0, 'The split rates should add up to be 1.0'
+    assert sum(split_rates) == 1.0, 'The split rates should add up to 1.0'
     assert os.path.exists(data_dir), f'The data dir ({data_dir}) does not exist.'
 
     # read the data and save the classnumber-classname relations csv

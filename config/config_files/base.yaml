@@ -51,6 +51,5 @@ optimizer:
 lr_policy:
   name: 'ReduceLROnPlateau'
   params:
-#    gamma: 0.99
     mode: 'max'
     patience: 5

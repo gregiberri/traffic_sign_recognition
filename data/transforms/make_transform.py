@@ -6,8 +6,10 @@ from torchvision import transforms
 def make_transform_composition(transformation_list, split):
     """
     Just casually iterating through the transformations from the transform list, load them and make the composition.
-    :param transformation_list: list containing lists of the function names and parameters: [['function1', [function1_params], ['function2', [function2_params]. ...]
-    :param split:
+    :param transformation_list: list containing lists of the function names and parameters:
+    [['function1', [function1_params], ['function2', [function2_params]. ...]
+
+    :param split: in which split we are: `train`, `val` or `test`
     :return: transform
     """
     compose_list = []

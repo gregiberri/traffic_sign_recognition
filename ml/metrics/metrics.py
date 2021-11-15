@@ -11,7 +11,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from torchmetrics import ConfusionMatrix
 import pandas as pd
-from data.utils.split_train_val_test import load_csv
+from data.utils.split_train_val import load_csv
 from ml.metrics import get_metric
 import seaborn as sn
 

@@ -4,7 +4,7 @@ import os
 import torch
 from tensorboardX import SummaryWriter
 
-from data.utils.split_train_val_test import load_csv, save_csv
+from data.utils.split_train_val import load_csv, save_csv
 from ml.metrics.metrics import Metrics
 from utils.device import DEVICE
 
@@ -23,15 +23,27 @@ class IOHandler:
         self.reset_results()
 
     def train(self):
+        """
+        Set the iohandler to use the train metric.
+        """
         self.metric = self.train_metric
 
     def val(self):
+        """
+        Set the iohandler to use the train metric.
+        """
         if self.phase != 'test': self.metric = self.val_metric
 
     def reset_results(self):
+        """
+        Reset the results to be empty before starting an epoch.
+        """
         self.results = {'paths': [], 'preds': [], 'labels': []}
 
     def get_max_metric(self):
+        """
+        Get the validation goal_metrics of the best model.
+        """
         return max(self.val_metric.epoch_results[self.config.metrics.goal_metric]) if self.phase == 'train' else None
 
     def init_results_dir(self):
@@ -49,19 +61,24 @@ class IOHandler:
         """
         Initialize the metrics to follow the performance during training and validation (or testing).
         """
-        logging.info("Initializing metrics.")
+        if self.phase != 'test':
+            logging.info("Initializing metrics.")
+            self.val_metric = Metrics(self.result_dir, 'val', self.config.metrics)
         if self.phase == 'train':
             self.train_metric = Metrics(self.result_dir, 'train', self.config.metrics)
-        elif self.phase == 'test':
-            return
-        self.val_metric = Metrics(self.result_dir, 'val', self.config.metrics)
 
     def init_tensorboard(self):
+        """
+        Initialize the tensorboard.
+        """
         if self.phase != 'test':
             logging.info("Initializing lr policy.")
             self.writer = SummaryWriter(os.path.join(self.result_dir, 'tensorboard'))
 
-    def append_results_csv(self):
+    def save_results_csv(self):
+        """
+        Save the data paths and predictions for test inference into a csv file.
+        """
         if self.phase == 'test':
             # save results to csv
             test_result_file = os.path.join(self.result_dir, 'test_results.csv')
@@ -73,10 +90,15 @@ class IOHandler:
             logging.info(f'Predictions are saved into file: {test_result_file}')
 
     def append_results(self, minibatch, output):
-        # save for calculating the full epoch metrics (the dataset is small so it can fit into the memory)
-        # the calculated metrics are `macro` average to be less sensitive to the class imbalance
-        # with larger datasets running metrics are suggested
-        # large datasets usually less affected by class imbalance too
+        """
+        Save for calculating the full epoch metrics (the dataset is small so it can fit into the memory)
+        the calculated metrics are `macro` average to be less sensitive to the class imbalance
+        with larger datasets running metrics are suggested
+        large datasets usually less affected by class imbalance too.
+
+        :param minibatch: minibatch diractory containing the paths (and during train or val the labels)
+        :param output: predictions of the network
+        """
 
         self.results['paths'].append(minibatch['paths'])
         self.results['preds'].append(output)
@@ -85,13 +107,16 @@ class IOHandler:
             self.results['labels'].append(minibatch['labels'])
 
     def calculate_iteration_metrics(self, minibatch, output, loss, pbar, preproc_time, train_time, idx):
+        """
+        Calculate the metrics during an iteration inside an epoch.
+        """
         if self.phase != 'test':
             self.metric.compute_metric(output, minibatch['labels'])
             self.update_bar_description(pbar, idx, preproc_time, train_time, loss)
 
             # write to tensorboard
             writer_iteration = self.solver.epoch * len(self.solver.loader) + idx
-            # image denormalization is hardcoded here which is not nice but at least works
+            # image denormalization is hardcoded here which is not nice but at least works :P
             self.writer.add_image(f'{self.solver.current_mode}/image', minibatch['input_images'][0].cpu() * \
                                   torch.Tensor([[[0.1560]], [[0.1815]], [[0.1727]]]) + \
                                   torch.Tensor([[[0.4432]], [[0.3938]], [[0.3764]]]),
@@ -119,6 +144,9 @@ class IOHandler:
         pbar.set_description(print_str, refresh=False)
 
     def compute_epoch_metric(self):
+        """
+        Calculate the metrics of a whole epoch.
+        """
         if self.phase != 'test':
             self.metric.compute_epoch_metric(torch.cat(self.results['preds'], 0),
                                              torch.cat(self.results['labels'], 0),
@@ -162,7 +190,7 @@ class IOHandler:
         logging.info(f"Loading the checkpoint from: {path}")
         continue_state_object = torch.load(path, map_location=torch.device("cpu"))
 
-        # load the needed things from the checkpoint
+        # load the things from the checkpoint
         if self.phase == 'train':
             self.solver.optimizer.load_state_dict(continue_state_object['optimizer'])
             self.solver.lr_policy.load_state_dict(continue_state_object['lr_policy'])

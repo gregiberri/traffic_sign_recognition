@@ -11,7 +11,7 @@ def get_loss(loss_config):
     """
     Get the loss function according to the loss config name and parameters.
 
-    :param loss_config: config containing the lr_policy name as config.name and the parameters as config.params
+    :param loss_config: config containing the loss name as config.name and the parameters as config.params
     :return: the loss function
     """
     if hasattr(torch_losses, str(loss_config.name)):

@@ -76,6 +76,9 @@ class ConfigNamespace(object):
         return self.__dict__ == other.__dict__
 
     def get_hpo_func(self, item):
+        """
+        Init hpo objects according to the lists containing hpo specifications.
+        """
         if isinstance(item, list):
             if isinstance(item[0], str):
                 if hasattr(tune, item[0]):

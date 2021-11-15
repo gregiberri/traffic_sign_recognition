@@ -31,7 +31,7 @@ if __name__ == '__main__':
     set_random_seed(config.env.random_seed)
     logging.info(f'Using {DEVICE} for running.')
 
-    # run a simple training/val or an HPO
+    # run a simple training/val/test or an HPO
     if args.mode == 'hpo':
         solver = HPOSolver(config, args)
     else:

@@ -83,6 +83,7 @@ class Metrics(object):
         goal_metric_by_class = np.array(goal_metric_by_class)[sorting_indices]
         class_names = np.array(list(number_class.values()))[sorting_indices]
 
+        # making the by-class metrics
         plt.bar(class_names, goal_metric_by_class)
         plt.xticks(rotation=90)
         plt.title(f'{goal_metric} scores')

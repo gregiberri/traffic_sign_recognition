@@ -35,6 +35,7 @@ class TrafficSignDataloader(data.Dataset):
         # load input image
         path = self.paths[item]
         with Image.open(path) as im:
+            im = im.convert('RGB')
             input_image = self.transforms(im)
 
         # use the labels if we have them (during train and val) otherwise use a [] placeholder

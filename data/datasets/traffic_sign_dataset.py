@@ -29,6 +29,8 @@ class TrafficSignDataloader(data.Dataset):
         else:
             self.paths, self.labels = self.original_paths, self.original_labels
 
+        assert self.__len__(), f'No data were found in {self.config.dataset_path}.'
+
         self.transforms = make_transform_composition(self.config.transforms, self.split)
 
     def __getitem__(self, item):

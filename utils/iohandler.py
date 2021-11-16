@@ -185,6 +185,7 @@ class IOHandler:
         """
         path = os.path.join(self.result_dir, 'model_best.pth.tar')
         if not os.path.exists(path):
+            assert self.phase == 'train', f'No model file found to load at: {path}'
             return
 
         logging.info(f"Loading the checkpoint from: {path}")

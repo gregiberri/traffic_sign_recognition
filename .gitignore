@@ -1,1 +1,2 @@
-/results/
+/results/*
+!results/base/base/place_the_model_here

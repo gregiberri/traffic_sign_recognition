@@ -59,8 +59,8 @@ For eval the  results dir ({result_dir}/{config_id}/{id_tag arg}) should contain
 For test the  results dir ({result_dir}/{config_id}/{id_tag arg}) should contain a model as 
 *model_best.pth.tar*. During test the predictions will be saved along with the filepaths in a csv file.\
 A pretrained model can be found in [here](https://drive.google.com/file/d/1sILKQ3MkCy7lSEOz8E7s3u5G5bJPpVzs/view?usp=sharing). 
-For simplicity it is recommended to copy it under *results/base/base*.
-> python run.py --config base_test --mode test
+For simplicity it is recommended to copy it under *results/base/base* and just change the dataset path to yours in *config/config_files/test.yaml*.
+> python run.py --config test --mode test
 
 #### HPO
 For hpo use:
